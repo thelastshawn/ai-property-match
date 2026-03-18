@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 import re
 import plotly.express as px
@@ -16,9 +16,10 @@ def clean_financial_string(raw_string):
     except ValueError: return 0.0
 
 def scrape_full_property_data(url):
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+    # Using cloudscraper to bypass basic datacenter blocks
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = scraper.get(url, timeout=10)
         if response.status_code != 200: return None
         soup = BeautifulSoup(response.content, 'html.parser')
         
