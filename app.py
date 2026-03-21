@@ -8,8 +8,6 @@ st.set_page_config(page_title="AI Property Match™ | Financial Readiness", layo
 st.title("🤖 AI Property Match™")
 st.subheader("Financial Readiness & Affordability Engine")
 
-# Lead capture session state removed for prototyping phase
-
 def clean_financial_string(raw_string):
     if not raw_string or raw_string in ["0", "Not Found"]: return 0.0
     try: return float(re.sub(r'[^\d]', '', raw_string))
@@ -24,23 +22,44 @@ def scrape_property_data(url):
         if response.status_code != 200: return None
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Grab the universal Hero Image (og:image)
+        # 1. Grab the universal Main Hero Image to guarantee we have at least one
         image_meta = soup.find("meta", property="og:image")
-        property_image = image_meta["content"] if image_meta else None
+        main_image = image_meta["content"] if image_meta else None
+        
+        # 2. Hunt for additional gallery images
+        image_list = []
+        if main_image:
+            image_list.append(main_image)
+            
+        # Find all image tags and filter out logos/icons (looking for JPEGs)
+        for img in soup.find_all('img'):
+            src = img.get('src')
+            # Filter for likely property photos (usually .jpg and not tiny thumbnails)
+            if src and ('.jpg' in src or '.jpeg' in src) and 'logo' not in src.lower():
+                if src not in image_list:
+                    image_list.append(src)
+                    
+        # Limit to the first 5 images to prevent UI clutter
+        final_images = image_list[:5]
 
-        # Route to the correct website logic
+        # 3. Route to the correct website logic
         if "redfin.com" in url:
-            return parse_redfin(soup, property_image)
+            data = parse_redfin(soup)
         elif "zillow.com" in url:
-            return parse_zillow(soup, property_image)
+            data = parse_zillow(soup)
         else:
             return None 
+            
+        # Attach the image list to our data dictionary
+        if data:
+            data['images'] = final_images
+        return data
             
     except Exception:
         return None
 
 # --- SITE-SPECIFIC PARSERS ---
-def parse_redfin(soup, image_url):
+def parse_redfin(soup):
     price_elem = soup.find('div', class_='stat-block price-section')
     raw_price = price_elem.text if price_elem else "0"
     
@@ -53,19 +72,16 @@ def parse_redfin(soup, image_url):
     return {
         'price': clean_financial_string(raw_price),
         'hoa': clean_financial_string(raw_hoa),
-        'taxes': round(clean_financial_string(raw_tax) / 12, 2),
-        'image': image_url
+        'taxes': round(clean_financial_string(raw_tax) / 12, 2)
     }
 
-def parse_zillow(soup, image_url):
+def parse_zillow(soup):
     price_elem = soup.find('span', {'data-testid': 'price'})
     raw_price = price_elem.text if price_elem else "0"
-    
     return {
         'price': clean_financial_string(raw_price),
         'hoa': 0.0, 
-        'taxes': 0.0, 
-        'image': image_url
+        'taxes': 0.0
     }
 
 # --- ZONE 1: BUYER FINANCIAL PROFILE ---
@@ -76,23 +92,22 @@ monthly_debts = st.sidebar.number_input("Total Monthly Debt ($)", value=500, ste
 st.sidebar.divider()
 st.sidebar.subheader("🎯 Target Goals")
 
-# NEW: Added 'help' tooltips to all target inputs for a cleaner UI
 target_range = st.sidebar.slider(
     "Target Payment Range ($)", 
     1000, 15000, (3000, 5000), step=100,
-    help="Define the minimum and maximum monthly payment you are comfortable with. The dashboard will flag if this property falls within your budget."
+    help="Define the minimum and maximum monthly payment you are comfortable with."
 )
 
 down_payment_pct = st.sidebar.slider(
     "Down Payment %", 
     0.0, 1.0, 0.20, 0.01,
-    help="The percentage of the home's purchase price you plan to pay upfront. 20% is the standard to avoid private mortgage insurance (PMI)."
+    help="The percentage of the home's purchase price you plan to pay upfront."
 )
 
 display_rate = st.sidebar.number_input(
     "Custom Interest Rate (%)", 
     value=6.500, step=0.125, format="%.3f",
-    help="The estimated annual interest rate for your mortgage. You can adjust this to see how different rates affect your monthly payment."
+    help="The estimated annual interest rate for your mortgage."
 )
 interest_rate = display_rate / 100 
 
@@ -102,18 +117,18 @@ tab1, tab2 = st.tabs(["🌐 AI Auto-Fill (Redfin & Zillow)", "✏️ Manual Entr
 target_price = 0.0
 target_hoa = 0.0
 target_taxes = 0.0
-property_image = None
+property_images = [] # Changed from single image to list
 
 with tab1:
     url_input = st.text_input("Paste Listing URL (Redfin or Zillow):")
     if st.button("Analyze Property") and url_input:
-        with st.spinner("Extracting data and images..."):
+        with st.spinner("Extracting data and image gallery..."):
             scraped_data = scrape_property_data(url_input)
             if scraped_data and scraped_data['price'] > 0:
                 target_price = scraped_data['price']
                 target_hoa = scraped_data['hoa']
                 target_taxes = scraped_data['taxes']
-                property_image = scraped_data['image']
+                property_images = scraped_data.get('images', [])
                 st.success("Property data successfully extracted!")
             else:
                 st.error("Extraction failed. The site may be blocking automated requests. Please use Manual Entry.")
@@ -124,12 +139,16 @@ with tab2:
     target_taxes = col_b.number_input("Monthly Taxes ($)", value=target_taxes, step=100.0)
     target_hoa = col_c.number_input("Monthly HOA ($)", value=target_hoa, step=50.0)
 
-# --- ZONE 3: THE DASHBOARD (Auth Gate Removed) ---
+# --- ZONE 3: THE DASHBOARD ---
 if target_price > 0:
     st.divider()
     
-    if property_image:
-        st.image(property_image, use_container_width=True, caption="Target Property")
+    # NEW: Render the Image Gallery!
+    if property_images:
+        # By passing a list to st.image and setting a width, Streamlit automatically 
+        # aligns them side-by-side in a responsive, scroll-friendly format.
+        st.image(property_images, width=220, caption=[f"Image {i+1}" for i in range(len(property_images))])
+        st.divider()
     
     if target_taxes == 0.0: target_taxes = (target_price * 0.012) / 12 
     monthly_insurance = (target_price * 0.0025) / 12
