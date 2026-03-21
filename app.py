@@ -8,15 +8,14 @@ st.set_page_config(page_title="AI Property Match™ | Financial Readiness", layo
 st.title("🤖 AI Property Match™")
 st.subheader("Financial Readiness & Affordability Engine")
 
-if 'authorized' not in st.session_state:
-    st.session_state['authorized'] = False
+# Lead capture session state removed for prototyping phase
 
 def clean_financial_string(raw_string):
     if not raw_string or raw_string in ["0", "Not Found"]: return 0.0
     try: return float(re.sub(r'[^\d]', '', raw_string))
     except ValueError: return 0.0
 
-# --- THE NEW MASTER SCRAPER ROUTER ---
+# --- THE MASTER SCRAPER ROUTER ---
 def scrape_property_data(url):
     scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
     
@@ -25,17 +24,17 @@ def scrape_property_data(url):
         if response.status_code != 200: return None
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # 1. Grab the universal Hero Image (og:image)
+        # Grab the universal Hero Image (og:image)
         image_meta = soup.find("meta", property="og:image")
         property_image = image_meta["content"] if image_meta else None
 
-        # 2. Route to the correct website logic
+        # Route to the correct website logic
         if "redfin.com" in url:
             return parse_redfin(soup, property_image)
         elif "zillow.com" in url:
             return parse_zillow(soup, property_image)
         else:
-            return None # Unsupported site
+            return None 
             
     except Exception:
         return None
@@ -59,15 +58,13 @@ def parse_redfin(soup, image_url):
     }
 
 def parse_zillow(soup, image_url):
-    # ZILLOW PLACEHOLDER: Zillow's HTML changes constantly and blocks bots heavily.
-    # This is a basic attempt to find their standard price tag.
     price_elem = soup.find('span', {'data-testid': 'price'})
     raw_price = price_elem.text if price_elem else "0"
     
     return {
         'price': clean_financial_string(raw_price),
-        'hoa': 0.0, # Harder to scrape reliably on Zillow
-        'taxes': 0.0, # Will trigger our 1.2% San Diego fallback
+        'hoa': 0.0, 
+        'taxes': 0.0, 
         'image': image_url
     }
 
@@ -77,10 +74,27 @@ annual_income = st.sidebar.number_input("Gross Annual Income ($)", value=120000,
 monthly_debts = st.sidebar.number_input("Total Monthly Debt ($)", value=500, step=100)
 
 st.sidebar.divider()
-st.sidebar.subheader("Target Goals")
-target_range = st.sidebar.slider("Target Payment Range ($)", 1000, 15000, (3000, 5000), step=100)
-down_payment_pct = st.sidebar.slider("Down Payment %", 0.0, 1.0, 0.20, 0.01)
-interest_rate = st.sidebar.slider("Custom Interest Rate %", 0.01, 0.10, 0.065, 0.001)
+st.sidebar.subheader("🎯 Target Goals")
+
+# NEW: Added 'help' tooltips to all target inputs for a cleaner UI
+target_range = st.sidebar.slider(
+    "Target Payment Range ($)", 
+    1000, 15000, (3000, 5000), step=100,
+    help="Define the minimum and maximum monthly payment you are comfortable with. The dashboard will flag if this property falls within your budget."
+)
+
+down_payment_pct = st.sidebar.slider(
+    "Down Payment %", 
+    0.0, 1.0, 0.20, 0.01,
+    help="The percentage of the home's purchase price you plan to pay upfront. 20% is the standard to avoid private mortgage insurance (PMI)."
+)
+
+display_rate = st.sidebar.number_input(
+    "Custom Interest Rate (%)", 
+    value=6.500, step=0.125, format="%.3f",
+    help="The estimated annual interest rate for your mortgage. You can adjust this to see how different rates affect your monthly payment."
+)
+interest_rate = display_rate / 100 
 
 # --- ZONE 2: SMART SEARCH TABS ---
 tab1, tab2 = st.tabs(["🌐 AI Auto-Fill (Redfin & Zillow)", "✏️ Manual Entry"])
@@ -110,24 +124,10 @@ with tab2:
     target_taxes = col_b.number_input("Monthly Taxes ($)", value=target_taxes, step=100.0)
     target_hoa = col_c.number_input("Monthly HOA ($)", value=target_hoa, step=50.0)
 
-# --- ZONE 3: LEAD CAPTURE ---
-if target_price > 0 and not st.session_state['authorized']:
-    st.divider()
-    st.info("🔒 **Unlock Your Full Financial Breakdown**")
-    with st.form("lead_capture_form"):
-        st.write("Authorize to view personalized affordability metrics.")
-        client_name = st.text_input("Full Name")
-        client_email = st.text_input("Email Address")
-        submitted = st.form_submit_button("Unlock Dashboard")
-        if submitted and client_name and client_email:
-            st.session_state['authorized'] = True
-            st.rerun()
-
-# --- ZONE 4: THE DASHBOARD ---
-if target_price > 0 and st.session_state['authorized']:
+# --- ZONE 3: THE DASHBOARD (Auth Gate Removed) ---
+if target_price > 0:
     st.divider()
     
-    # NEW: Display the Property Image!
     if property_image:
         st.image(property_image, use_container_width=True, caption="Target Property")
     
