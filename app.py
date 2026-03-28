@@ -6,42 +6,45 @@ import plotly.express as px
 
 st.set_page_config(page_title="AI Property Match™ | Engine", layout="wide")
 
-# --- CUSTOM CSS INJECTION (THE WEB DESIGN UPGRADE) ---
-# This block forces Streamlit to look like a custom web app
-# --- CUSTOM CSS INJECTION (THE WEB DESIGN UPGRADE) ---
+# --- CUSTOM CSS INJECTION (MIDNIGHT SAPPHIRE THEME) ---
 custom_css = """
 <style>
-    /* 1. Main app background color */
+    /* 1. Main app background color (Darkest) */
     .stApp {
-        background-color: #F9F9F7 !important;
+        background-color: #0B0F19 !important;
     }
     
-    /* 2. Style the Sidebar and FORCE dark text inside it */
+    /* 2. Style the Sidebar (Slightly Lighter) */
     [data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 2px solid #E5E9EA;
+        background-color: #111827 !important;
+        border-right: 1px solid #1F2937;
     }
     
-    /* 3. Create the "Bubbles" (Rounded Cards for Metrics) */
+    /* 3. Create the "Bubbles" (Completely different color: Royal Blue) */
     [data-testid="metric-container"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E5E9EA;
+        background-color: #1E3A8A !important; 
+        border: 1px solid #2563EB;
         padding: 15px 20px;
         border-radius: 16px; 
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); 
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4); 
     }
     
-    /* 4. The Dark Mode Override: Force all text, headers, and labels to be dark slate */
+    /* 4. Force all text to be crisp, high-contrast white */
     h1, h2, h3, h4, h5, h6, p, label, div, span, .stMarkdown {
-        color: #1E293B !important;
+        color: #F8FAFC !important;
         font-family: 'Helvetica Neue', sans-serif;
     }
     
-    /* 5. Fix the input box backgrounds so they don't turn black in dark mode */
+    /* 5. Style the input boxes to match the dark theme */
     .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div {
-        background-color: #FFFFFF !important;
-        color: #1E293B !important;
-        border: 1px solid #E5E9EA !important;
+        background-color: #1F2937 !important;
+        color: #F8FAFC !important;
+        border: 1px solid #374151 !important;
+    }
+    
+    /* Make the tabs text visible */
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-weight: bold;
     }
 </style>
 """
@@ -100,10 +103,8 @@ def parse_zillow(soup):
     return {'price': clean_financial_string(raw_price), 'hoa': 0.0, 'taxes': 0.0}
 
 # --- ZONE 1: THE AI MATCHING PROFILE (Sidebar) ---
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Ideal_home_icon.svg/1024px-Ideal_home_icon.svg.png", width=50) # Placeholder logo
 st.sidebar.header("The Buyer Profile")
 
-# Expander 1: Financials
 with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     annual_income = st.number_input("Gross Annual Income ($)", value=120000, step=5000)
     monthly_debts = st.number_input("Total Monthly Debt ($)", value=500, step=100)
@@ -112,16 +113,15 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     display_rate = st.number_input("Custom Interest Rate (%)", value=6.500, step=0.125, format="%.3f")
     interest_rate = display_rate / 100 
 
-# Expander 2: Lifestyle (NEW PATH A FEATURES)
 with st.sidebar.expander("🏡 Lifestyle Preferences", expanded=True):
-    st.caption("These data points will feed the Phase 2 Machine Learning Recommendation Engine.")
     target_zips = st.multiselect("Preferred Zip Codes", ["92117", "92109", "92101", "92104", "92037"], default=["92117", "92109"])
     property_type = st.selectbox("Property Type", ["Single Family Home", "Townhouse", "Condo", "Multi-Family"])
     min_beds = st.number_input("Minimum Bedrooms", value=3, step=1)
     must_haves = st.multiselect("Must Haves", ["Large Yard", "Pool", "Garage", "Ocean View", "Walkable Neighborhood"])
 
-# --- ZONE 2: SMART SEARCH TABS ---
-tab1, tab2 = st.tabs(["🌐 AI Auto-Fill", "✏️ Manual Entry"])
+# --- ZONE 2: SMART SEARCH & LEAD CAPTURE TABS ---
+# NEW: Added the third tab for Contact Info
+tab1, tab2, tab3 = st.tabs(["🌐 AI Auto-Fill", "✏️ Manual Entry", "📬 Contact Info"])
 
 target_price, target_hoa, target_taxes, property_images = 0.0, 0.0, 0.0, []
 
@@ -141,6 +141,25 @@ with tab2:
     target_price = col_a.number_input("Purchase Price ($)", value=target_price, step=10000.0)
     target_taxes = col_b.number_input("Monthly Taxes ($)", value=target_taxes, step=100.0)
     target_hoa = col_c.number_input("Monthly HOA ($)", value=target_hoa, step=50.0)
+
+# NEW: The Contact Info Tab
+with tab3:
+    st.markdown("### 🔒 VIP Buyer Registration")
+    st.write("Enter your information below to register your profile and receive personalized property alerts.")
+    with st.form("contact_form"):
+        col_first, col_last = st.columns(2)
+        first_name = col_first.text_input("First Name")
+        last_name = col_last.text_input("Last Name")
+        phone_num = st.text_input("Phone Number")
+        email_addr = st.text_input("Email Address")
+        
+        submit_contact = st.form_submit_button("Submit Details")
+        if submit_contact:
+            if first_name and last_name and phone_num and email_addr:
+                st.success(f"Success! We've saved your contact info, {first_name}.")
+                # This is where we will eventually write the code to send Derick an email or update a database!
+            else:
+                st.error("Please fill out all contact fields.")
 
 # --- ZONE 3: THE DASHBOARD ---
 if target_price > 0:
@@ -170,13 +189,14 @@ if target_price > 0:
     else:
         col4.metric("Budget Match", "🚨 Denied")
 
-    st.markdown("<br>", unsafe_allow_html=True) # Adds a little spacing
+    st.markdown("<br>", unsafe_allow_html=True) 
     
-    # Modernized Chart Colors
+    # Updated Chart Colors to match the dark theme
     chart_data = {
         "Category": ["Principal & Interest", "Property Taxes", "Insurance", "HOA"],
         "Amount": [monthly_pi, target_taxes, monthly_insurance, target_hoa]
     }
-    fig = px.pie(chart_data, values="Amount", names="Category", hole=0.6, color_discrete_sequence=['#1E293B', '#3B82F6', '#93C5FD', '#E2E8F0'])
+    fig = px.pie(chart_data, values="Amount", names="Category", hole=0.6, color_discrete_sequence=['#3B82F6', '#60A5FA', '#93C5FD', '#1E3A8A'])
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#F8FAFC')) # Makes chart background transparent
     fig.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
