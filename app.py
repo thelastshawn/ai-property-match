@@ -8,32 +8,40 @@ st.set_page_config(page_title="AI Property Match™ | Engine", layout="wide")
 
 # --- CUSTOM CSS INJECTION (THE WEB DESIGN UPGRADE) ---
 # This block forces Streamlit to look like a custom web app
+# --- CUSTOM CSS INJECTION (THE WEB DESIGN UPGRADE) ---
 custom_css = """
 <style>
-    /* 1. Change the main app background color */
+    /* 1. Main app background color */
     .stApp {
-        background-color: #F4F7F6;
+        background-color: #F4F7F6 !important;
     }
     
-    /* 2. Style the Sidebar to pop out */
+    /* 2. Style the Sidebar and FORCE dark text inside it */
     [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
+        background-color: #FFFFFF !important;
         border-right: 2px solid #E5E9EA;
     }
     
     /* 3. Create the "Bubbles" (Rounded Cards for Metrics) */
     [data-testid="metric-container"] {
-        background-color: #FFFFFF;
+        background-color: #FFFFFF !important;
         border: 1px solid #E5E9EA;
         padding: 15px 20px;
-        border-radius: 16px; /* This makes the corners super rounded */
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); /* Soft drop shadow */
+        border-radius: 16px; 
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); 
     }
     
-    /* 4. Customize the Headers */
-    h1, h2, h3 {
-        color: #1E293B;
+    /* 4. The Dark Mode Override: Force all text, headers, and labels to be dark slate */
+    h1, h2, h3, h4, h5, h6, p, label, div, span, .stMarkdown {
+        color: #1E293B !important;
         font-family: 'Helvetica Neue', sans-serif;
+    }
+    
+    /* 5. Fix the input box backgrounds so they don't turn black in dark mode */
+    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>div {
+        background-color: #FFFFFF !important;
+        color: #1E293B !important;
+        border: 1px solid #E5E9EA !important;
     }
 </style>
 """
