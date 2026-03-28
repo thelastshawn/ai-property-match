@@ -13,7 +13,7 @@ custom_css = """
 <style>
     /* 1. Main app background color */
     .stApp {
-        background-color: #F4F7F6 !important;
+        background-color: #F9F9F7 !important;
     }
     
     /* 2. Style the Sidebar and FORCE dark text inside it */
