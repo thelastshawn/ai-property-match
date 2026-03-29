@@ -30,43 +30,59 @@ st.markdown(custom_css, unsafe_allow_html=True)
 st.title("🤖 AI Property Match™")
 st.subheader("Financial & Lifestyle Matching Engine")
 
-# --- THE NEW BACKEND: RAPIDAPI (REALTY MOLE) INTEGRATION ---
-def fetch_property_data_api(address):
-    url = "https://realty-mole-property-api.p.rapidapi.com/properties"
-    querystring = {"address": address}
+# --- THE NEW BACKEND: REALTY IN US (RAPIDAPI) INTEGRATION ---
+def fetch_property_data_api(zip_code):
+    url = "https://realty-in-us.p.rapidapi.com/properties/v3/list"
     
-    # Passing your new RapidAPI Key and defining the specific host
+    # Your exact payload, adjusted to use the user's zip code input
+    payload = {
+        "limit": 10, # We only need the top few to grab the newest one
+        "offset": 0,
+        "postal_code": str(zip_code),
+        "status": ["for_sale", "ready_to_build"],
+        "sort": {
+            "direction": "desc",
+            "field": "list_date"
+        }
+    }
+    
     headers = {
-        "X-RapidAPI-Key": "ad67d0a64dmsh514c74e7fcdc0a0p13b2fbjsnd81dec4f00d5",
-        "X-RapidAPI-Host": "realty-mole-property-api.p.rapidapi.com"
+        "x-rapidapi-key": "ad67d0a64dmsh514c74e7fcdc0a0p13b2fbjsnd81dec4f00d5",
+        "x-rapidapi-host": "realty-in-us.p.rapidapi.com",
+        "Content-Type": "application/json"
     }
     
     try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
+        # Note: We use requests.post() here instead of .get() based on the API docs
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            # Realty Mole returns a list of matches, we grab the first one
-            if isinstance(data, list) and len(data) > 0:
-                prop = data[0]
+            
+            # Navigate the nested JSON structure the API returns
+            results = data.get("data", {}).get("home_search", {}).get("results", [])
+            
+            if results and len(results) > 0:
+                prop = results[0] # Grab the newest listing
                 
-                # Extracting data safely using dict.get()
-                price = prop.get('price', 0)
+                # Extract the data safely
+                price = prop.get("list_price", 0)
+                hoa = prop.get("description", {}).get("hoa", 0)
                 
-                # Navigating the tax structure
-                tax_info = prop.get('taxInfo', {})
-                annual_taxes = tax_info.get('taxAmount', 0) if isinstance(tax_info, dict) else 0
+                # Property tax is often nested in tax_record
+                annual_taxes = prop.get("tax_record", {}).get("property_tax", 0)
                 monthly_taxes = annual_taxes / 12 if annual_taxes else 0
                 
-                # Navigating the HOA structure
-                hoa_info = prop.get('hoa', {})
-                hoa = hoa_info.get('fee', 0) if isinstance(hoa_info, dict) else 0
+                # Grab the address and the primary photo to display
+                address = prop.get("location", {}).get("address", {}).get("line", "Unknown Address")
+                photo_url = prop.get("primary_photo", {}).get("href", "")
                 
                 return {
                     'price': float(price),
-                    'hoa': float(hoa),
+                    'hoa': float(hoa) if hoa else 0.0,
                     'taxes': float(monthly_taxes),
-                    'images': [] # API image links are heavily gated on free tiers
+                    'address': address,
+                    'image': photo_url.replace("s.jpg", "od-w1024_h768.webp") if photo_url else None # Attempts to grab higher res
                 }
         return None
     except Exception as e:
@@ -90,22 +106,25 @@ with st.sidebar.expander("🏡 Lifestyle Preferences", expanded=True):
     must_haves = st.multiselect("Must Haves", ["Large Yard", "Pool", "Garage", "Ocean View", "Walkable Neighborhood"])
 
 # --- ZONE 2: SMART SEARCH & LEAD CAPTURE TABS ---
-tab1, tab2, tab3 = st.tabs(["🌐 Live API Search", "✏️ Manual Entry", "📬 Contact Info"])
+tab1, tab2, tab3 = st.tabs(["🌐 Live Local Search", "✏️ Manual Entry", "📬 Contact Info"])
 
-target_price, target_hoa, target_taxes = 0.0, 0.0, 0.0
+target_price, target_hoa, target_taxes, display_address, display_image = 0.0, 0.0, 0.0, "", None
 
 with tab1:
-    address_input = st.text_input("Enter Property Address (e.g., 3141 Erie St, San Diego, CA):")
-    if st.button("Query Database") and address_input:
-        with st.spinner("Connecting to RapidAPI..."):
-            api_data = fetch_property_data_api(address_input)
+    # Changed input to Zip Code to match the API requirements
+    zip_input = st.text_input("Enter Zip Code to pull the newest listing:", value="92117")
+    if st.button("Query Database") and zip_input:
+        with st.spinner("Connecting to Realtor DB..."):
+            api_data = fetch_property_data_api(zip_input)
             if api_data and api_data['price'] > 0:
                 target_price = api_data['price']
                 target_hoa = api_data['hoa']
                 target_taxes = api_data['taxes']
-                st.success("Secure connection established. Data retrieved instantly!")
+                display_address = api_data['address']
+                display_image = api_data['image']
+                st.success("Secure connection established. Newest listing retrieved!")
             else:
-                st.error("Property not found or API request failed. Ensure you are subscribed to Realty Mole on RapidAPI.")
+                st.error("Could not find active listings in that Zip Code, or API quota exceeded.")
 
 with tab2:
     col_a, col_b, col_c = st.columns(3)
@@ -115,52 +134,3 @@ with tab2:
 
 with tab3:
     st.markdown("### 🔒 VIP Buyer Registration")
-    st.write("Enter your information below to register your profile and receive personalized property alerts.")
-    with st.form("contact_form"):
-        col_first, col_last = st.columns(2)
-        first_name = col_first.text_input("First Name")
-        last_name = col_last.text_input("Last Name")
-        phone_num = st.text_input("Phone Number")
-        email_addr = st.text_input("Email Address")
-        
-        submit_contact = st.form_submit_button("Submit Details")
-        if submit_contact:
-            if first_name and last_name and phone_num and email_addr:
-                st.success(f"Success! We've saved your contact info, {first_name}.")
-            else:
-                st.error("Please fill out all contact fields.")
-
-# --- ZONE 3: THE DASHBOARD ---
-if target_price > 0:
-    st.divider()
-    
-    if target_taxes == 0.0: target_taxes = (target_price * 0.012) / 12 
-    monthly_insurance = (target_price * 0.0025) / 12
-    down_payment_amount = target_price * down_payment_pct
-    loan_amount = target_price - down_payment_amount
-    
-    r = interest_rate / 12
-    monthly_pi = loan_amount * (r * (1 + r)**360) / ((1 + r)**360 - 1) if loan_amount > 0 else 0
-    total_piti = monthly_pi + target_taxes + monthly_insurance + target_hoa
-    
-    st.markdown("### 📊 Affordability Breakdown")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Purchase Price", f"${target_price:,.0f}")
-    col2.metric(f"Down Pmt ({down_payment_pct*100:.0f}%)", f"${down_payment_amount:,.0f}")
-    col3.metric("Monthly Payment", f"${total_piti:,.0f}")
-    
-    if target_range[0] <= total_piti <= target_range[1]:
-        col4.metric("Budget Match", "✅ Approved")
-    else:
-        col4.metric("Budget Match", "🚨 Denied")
-
-    st.markdown("<br>", unsafe_allow_html=True) 
-    
-    chart_data = {
-        "Category": ["Principal & Interest", "Property Taxes", "Insurance", "HOA"],
-        "Amount": [monthly_pi, target_taxes, monthly_insurance, target_hoa]
-    }
-    fig = px.pie(chart_data, values="Amount", names="Category", hole=0.6, color_discrete_sequence=['#3B82F6', '#60A5FA', '#93C5FD', '#1E3A8A'])
-    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#F8FAFC'))
-    fig.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
