@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import math
 import plotly.express as px
 
 st.set_page_config(page_title="AI Property Match™ | Engine", layout="wide")
@@ -7,6 +8,9 @@ st.set_page_config(page_title="AI Property Match™ | Engine", layout="wide")
 # --- STATE MANAGEMENT ---
 if 'property_results' not in st.session_state:
     st.session_state['property_results'] = []
+# NEW: Track the current page for pagination
+if 'current_page' not in st.session_state:
+    st.session_state['current_page'] = 0
 
 # --- CUSTOM CSS INJECTION (MIDNIGHT SAPPHIRE) ---
 custom_css = """
@@ -27,6 +31,9 @@ custom_css = """
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p { font-weight: bold; }
     .property-card { background-color: #1F2937; padding: 10px; border-radius: 10px; border: 1px solid #374151; margin-bottom: 15px; }
     .disclaimer { font-size: 0.8em; color: #9CA3AF !important; font-style: italic; margin-top: 10px;}
+    
+    /* Center the pagination text */
+    .pagination-text { text-align: center; color: #9CA3AF; font-size: 1.1em; padding-top: 10px; }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -39,7 +46,7 @@ st.subheader("Financial & Lifestyle Matching Engine")
 def fetch_property_gallery_api(zip_code, beds, baths, min_sqft, max_hoa):
     url = "https://realty-in-us.p.rapidapi.com/properties/v3/list"
     payload = {
-        "limit": 18, 
+        "limit": 100, # UPGRADED: Now pulls up to 100 homes at once
         "offset": 0,
         "postal_code": str(zip_code),
         "status": ["for_sale", "ready_to_build", "pending"], 
@@ -101,7 +108,6 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     target_range = st.slider("Target Payment Range ($)", 1000, 15000, (3000, 5000), step=100)
     down_payment_pct = st.slider("Down Payment %", 0.0, 1.0, 0.20, 0.01)
     
-    # NEW: Mortgage Rate Dropdown
     loan_program = st.selectbox("Loan Program", [
         "30-Year Fixed (Conventional) ~ 6.48%",
         "15-Year Fixed (Conventional) ~ 5.80%",
@@ -111,21 +117,16 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
         "Custom Rate"
     ])
     
-    # Dynamic Rate Logic
     if loan_program == "Custom Rate":
         display_rate = st.number_input("Custom Interest Rate (%)", value=6.500, step=0.125, format="%.3f")
         loan_term_years = st.selectbox("Loan Term", [30, 15], index=0)
     else:
-        # Determine loan term based on selection
         loan_term_years = 15 if "15-Year" in loan_program else 30
-        
-        # Determine interest rate based on selection
         if "30-Year Fixed (Conventional)" in loan_program: display_rate = 6.48
         elif "15-Year Fixed (Conventional)" in loan_program: display_rate = 5.80
         elif "FHA" in loan_program: display_rate = 6.12
         elif "VA" in loan_program: display_rate = 5.86
         elif "5/1 ARM" in loan_program: display_rate = 6.00
-        
         st.info(f"Applying {display_rate}% over {loan_term_years} years.")
         
     interest_rate = display_rate / 100 
@@ -154,7 +155,6 @@ def show_dashboard(prop):
     down_payment_amount = target_price * down_payment_pct
     loan_amount = target_price - down_payment_amount
     
-    # NEW: Dynamic Payment Calculation (360 months vs 180 months)
     total_months = loan_term_years * 12
     r = interest_rate / 12
     monthly_pi = loan_amount * (r * (1 + r)**total_months) / ((1 + r)**total_months - 1) if loan_amount > 0 else 0
@@ -166,10 +166,8 @@ def show_dashboard(prop):
     col2.metric(f"Down Pmt ({down_payment_pct*100:.0f}%)", f"${down_payment_amount:,.0f}")
     col3.metric("Est. Monthly", f"${total_piti:,.0f}")
     
-    if target_range[0] <= total_piti <= target_range[1]:
-        col4.metric("Verdict", "✅ Match")
-    else:
-        col4.metric("Verdict", "🚨 Does Not Fit Budget")
+    if target_range[0] <= total_piti <= target_range[1]: col4.metric("Verdict", "✅ Match")
+    else: col4.metric("Verdict", "🚨 Does Not Fit Budget")
 
     chart_data = {
         "Category": ["Principal & Interest", "Property Taxes", "Insurance", "HOA"],
@@ -190,34 +188,69 @@ with tab1:
     zip_input = col1.text_input("Enter Zip Code:", value="92117")
     
     if col2.button("🔍 Search Area", use_container_width=True):
-        with st.spinner("Applying filters and scanning MLS..."):
+        with st.spinner("Applying filters and scanning MLS for up to 100 properties..."):
             results = fetch_property_gallery_api(zip_input, min_beds, min_baths, min_sqft, max_hoa_fee)
             if results:
                 st.session_state['property_results'] = results
+                st.session_state['current_page'] = 0 # Reset to first page on new search
             else:
-                st.error("No properties match your strict filters. Try lowering the beds/baths or increasing the Max HOA.")
+                st.error("No properties match your strict filters.")
 
     if st.session_state['property_results']:
         st.divider()
         col_title, col_sort = st.columns([2, 1])
         col_title.markdown("### 🏡 Matching Properties")
-        sort_option = col_sort.selectbox("Sort By:", ["Newest / Relevant", "Price: Low to High", "Price: High to Low"])
+        
+        # Sorting Logic
+        def update_sort():
+            st.session_state['current_page'] = 0 # Reset page if they change the sort order
+            
+        sort_option = col_sort.selectbox("Sort By:", ["Newest / Relevant", "Price: Low to High", "Price: High to Low"], on_change=update_sort)
         
         display_results = st.session_state['property_results']
         if sort_option == "Price: Low to High": display_results = sorted(display_results, key=lambda x: x['price'])
         elif sort_option == "Price: High to Low": display_results = sorted(display_results, key=lambda x: x['price'], reverse=True)
         
+        # --- PAGINATION LOGIC ---
+        ITEMS_PER_PAGE = 9
+        total_items = len(display_results)
+        total_pages = math.ceil(total_items / ITEMS_PER_PAGE)
+        
+        # Failsafe in case pages get out of sync
+        if st.session_state['current_page'] >= total_pages:
+            st.session_state['current_page'] = 0
+            
+        # Slice the list for the current page
+        start_idx = st.session_state['current_page'] * ITEMS_PER_PAGE
+        end_idx = start_idx + ITEMS_PER_PAGE
+        page_results = display_results[start_idx:end_idx]
+        
+        # Display the 9-card Grid
         cols = st.columns(3)
-        for idx, prop in enumerate(display_results[:9]): 
+        for idx, prop in enumerate(page_results): 
             with cols[idx % 3]: 
                 st.markdown('<div class="property-card">', unsafe_allow_html=True)
                 st.image(prop['images'][0], use_container_width=True) 
                 st.markdown(f"**${prop['price']:,.0f}** | {prop['type']}")
                 st.caption(prop['address'])
                 
-                if st.button("📊 Analyze Financials", key=f"btn_{idx}", use_container_width=True):
+                if st.button("📊 Analyze Financials", key=f"btn_{prop['address']}", use_container_width=True):
                     show_dashboard(prop)
                 st.markdown('</div>', unsafe_allow_html=True)
+                
+        # --- PAGINATION CONTROLS (BOTTOM) ---
+        st.divider()
+        col_prev, col_page, col_next = st.columns([1, 2, 1])
+        
+        if col_prev.button("⬅️ Previous", disabled=(st.session_state['current_page'] == 0), use_container_width=True):
+            st.session_state['current_page'] -= 1
+            st.rerun()
+            
+        col_page.markdown(f"<div class='pagination-text'>Page <b>{st.session_state['current_page'] + 1}</b> of <b>{total_pages}</b> <br>({total_items} homes found)</div>", unsafe_allow_html=True)
+        
+        if col_next.button("Next ➡️", disabled=(st.session_state['current_page'] >= total_pages - 1), use_container_width=True):
+            st.session_state['current_page'] += 1
+            st.rerun()
 
 with tab2:
     st.markdown("### 🔒 VIP Buyer Registration")
