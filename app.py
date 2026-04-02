@@ -37,9 +37,11 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- HEADER ---
+# --- HEADER & SLOGAN ---
 st.title("🤖 AI Property Match™")
 st.subheader("Financial & Lifestyle Matching Engine")
+# Updated Trust Statement (Brokerage Removed)
+st.caption("🔒 Secure, transparent market math to help San Diego buyers purchase with confidence.")
 
 # --- THE BACKEND: API FETCH WITH NEW FILTERS ---
 def fetch_property_gallery_api(zip_code, beds, baths, min_sqft, max_hoa):
@@ -103,9 +105,9 @@ def fetch_property_gallery_api(zip_code, beds, baths, min_sqft, max_hoa):
 st.sidebar.header("The Buyer Profile")
 
 with st.sidebar.expander("💰 Financial Constraints", expanded=True):
-    annual_income = st.number_input("Gross Annual Income ($)", value=120000, step=5000)
-    target_range = st.slider("Target Payment Range ($)", 1000, 15000, (3000, 5000), step=100)
-    down_payment_pct = st.slider("Down Payment %", 0.0, 1.0, 0.20, 0.01)
+    annual_income = st.number_input("Gross Annual Income ($)", value=120000, step=5000, help="Your total yearly income before taxes.")
+    target_range = st.slider("Target Payment Range ($)", 1000, 15000, (3000, 5000), step=100, help="The monthly payment you are comfortable making, including estimated taxes and insurance.")
+    down_payment_pct = st.slider("Down Payment %", 0.0, 1.0, 0.20, 0.01, help="The percentage of the home's price you plan to pay upfront in cash. Putting down 20% usually avoids private mortgage insurance (PMI).")
     
     loan_program = st.selectbox(
         "Loan Program", 
@@ -121,8 +123,8 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     )
     
     if loan_program == "Custom Rate":
-        display_rate = st.number_input("Custom Interest Rate (%)", value=6.500, step=0.125, format="%.3f")
-        loan_term_years = st.selectbox("Loan Term", [30, 15], index=0)
+        display_rate = st.number_input("Custom Interest Rate (%)", value=6.500, step=0.125, format="%.3f", help="Enter the specific interest rate quoted by your lender.")
+        loan_term_years = st.selectbox("Loan Term", [30, 15], index=0, help="The lifespan of your loan in years.")
     else:
         loan_term_years = 15 if "15-Year" in loan_program else 30
         if "30-Year Fixed (Conventional)" in loan_program: display_rate = 6.48
@@ -138,8 +140,6 @@ with st.sidebar.expander("🏡 Property Filters", expanded=True):
     min_beds = st.number_input("Minimum Bedrooms", value=3, step=1, help="The minimum number of sleeping rooms you need.")
     min_baths = st.number_input("Minimum Bathrooms", value=2, step=1, help="Includes both full and half bathrooms.")
     min_sqft = st.number_input("Minimum SqFt", value=1200, step=100, help="Total livable interior space. For reference, a standard 2-car garage is about 400 SqFt.")
-    
-    # syntax error fixed here:
     max_hoa_fee = st.number_input("Max Monthly HOA ($)", value=500, step=50, help="Homeowners Association fees. Condos and townhomes typically have higher HOAs to cover exterior maintenance, pools, and amenities.")
 
 # --- ZONE 3: THE POP-UP DASHBOARD ---
@@ -172,7 +172,7 @@ def show_dashboard(prop):
     col3.metric("Est. Monthly", f"${total_piti:,.0f}")
     
     if target_range[0] <= total_piti <= target_range[1]: col4.metric("Verdict", "✅ Match")
-    else: col4.metric("Verdict", "🚨 Does Not Fit Budget")
+    else: col4.metric("Verdict", "🚨 Not a Match")
 
     chart_data = {
         "Category": ["Principal & Interest", "Property Taxes", "Insurance", "HOA"],
@@ -186,17 +186,15 @@ def show_dashboard(prop):
     st.markdown('<p class="disclaimer">Disclaimer: This affordability breakdown is an estimate for educational purposes only and does not constitute official financial advice or a guarantee of loan approval. Property taxes and insurance rates are estimations.</p>', unsafe_allow_html=True)
 
 # --- ZONE 2: SMART SEARCH TABS ---
-# Restored the 3 tabs!
-tab1, tab2, tab3 = st.tabs(["🌐 Live Area Search", "✏️ Manual Entry", "📬 VIP Registration"])
+tab1, tab2, tab3 = st.tabs(["🌐 Live Area Search", "✏️ Manual Entry", "📬 Contact Information"])
 
 with tab1:
-    st.markdown("### 📍 Search MLS by Zip Code")
+    st.markdown("### 📍 Search by Zip Code")
     
-    # Made the Zip Input full width and incredibly prominent
     zip_input = st.text_input("Enter Zip Code:", value="92117")
     
     if st.button("🔍 Search Area", use_container_width=True):
-        with st.spinner("Applying filters and scanning MLS for up to 100 properties..."):
+        with st.spinner("Applying filters and scanning for up to 100 properties..."):
             results = fetch_property_gallery_api(zip_input, min_beds, min_baths, min_sqft, max_hoa_fee)
             if results:
                 st.session_state['property_results'] = results
@@ -271,7 +269,6 @@ with tab1:
             st.session_state['current_page'] += 1
             st.rerun()
 
-# Restored the Manual Entry tab!
 with tab2:
     st.markdown("### ✏️ Manual Entry")
     st.caption("Bypass the API and enter property details manually.")
@@ -293,7 +290,7 @@ with tab2:
             show_dashboard(mock_prop)
 
 with tab3:
-    st.markdown("### 🔒 VIP Buyer Registration")
+    st.markdown("### 📬 Contact Information")
     with st.form("contact_form"):
         col_first, col_last = st.columns(2)
         first_name = col_first.text_input("First Name")
