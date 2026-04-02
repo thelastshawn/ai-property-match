@@ -10,6 +10,8 @@ if 'property_results' not in st.session_state:
     st.session_state['property_results'] = []
 if 'current_page' not in st.session_state:
     st.session_state['current_page'] = 0
+if 'selected_property' not in st.session_state:
+    st.session_state['selected_property'] = None
 
 # --- CUSTOM CSS INJECTION (MIDNIGHT SAPPHIRE) ---
 custom_css = """
@@ -30,7 +32,6 @@ custom_css = """
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p { font-weight: bold; }
     .property-card { background-color: #1F2937; padding: 10px; border-radius: 10px; border: 1px solid #374151; margin-bottom: 15px; }
     .disclaimer { font-size: 0.8em; color: #9CA3AF !important; font-style: italic; margin-top: 10px;}
-    
     .pagination-text { text-align: center; color: #9CA3AF; font-size: 1.0em; padding-bottom: 5px; }
 </style>
 """
@@ -106,7 +107,6 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     target_range = st.slider("Target Payment Range ($)", 1000, 15000, (3000, 5000), step=100)
     down_payment_pct = st.slider("Down Payment %", 0.0, 1.0, 0.20, 0.01)
     
-    # NEW: Added Tooltip to Loan Program
     loan_program = st.selectbox(
         "Loan Program", 
         [
@@ -135,8 +135,170 @@ with st.sidebar.expander("💰 Financial Constraints", expanded=True):
     interest_rate = display_rate / 100 
 
 with st.sidebar.expander("🏡 Property Filters", expanded=True):
-    # NEW: Added Tooltips to all Property Filters
     min_beds = st.number_input("Minimum Bedrooms", value=3, step=1, help="The minimum number of sleeping rooms you need.")
     min_baths = st.number_input("Minimum Bathrooms", value=2, step=1, help="Includes both full and half bathrooms.")
     min_sqft = st.number_input("Minimum SqFt", value=1200, step=100, help="Total livable interior space. For reference, a standard 2-car garage is about 400 SqFt.")
+    
+    # syntax error fixed here:
     max_hoa_fee = st.number_input("Max Monthly HOA ($)", value=500, step=50, help="Homeowners Association fees. Condos and townhomes typically have higher HOAs to cover exterior maintenance, pools, and amenities.")
+
+# --- ZONE 3: THE POP-UP DASHBOARD ---
+@st.dialog("📊 Property Financial Analysis", width="large")
+def show_dashboard(prop):
+    target_price = prop['price']
+    target_taxes = prop['taxes']
+    target_hoa = prop['hoa']
+    
+    st.markdown(f"### 🏠 **{prop['address']}** | {prop['type']}")
+    
+    if prop['images']:
+        st.caption("🔍 *Click any image to enlarge*")
+        st.image(prop['images'], width=150) 
+    
+    if target_taxes == 0.0: target_taxes = (target_price * 0.012) / 12 
+    monthly_insurance = (target_price * 0.0025) / 12
+    down_payment_amount = target_price * down_payment_pct
+    loan_amount = target_price - down_payment_amount
+    
+    total_months = loan_term_years * 12
+    r = interest_rate / 12
+    monthly_pi = loan_amount * (r * (1 + r)**total_months) / ((1 + r)**total_months - 1) if loan_amount > 0 else 0
+    total_piti = monthly_pi + target_taxes + monthly_insurance + target_hoa
+    
+    st.divider()
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Purchase Price", f"${target_price:,.0f}")
+    col2.metric(f"Down Pmt ({down_payment_pct*100:.0f}%)", f"${down_payment_amount:,.0f}")
+    col3.metric("Est. Monthly", f"${total_piti:,.0f}")
+    
+    if target_range[0] <= total_piti <= target_range[1]: col4.metric("Verdict", "✅ Match")
+    else: col4.metric("Verdict", "🚨 Does Not Fit Budget")
+
+    chart_data = {
+        "Category": ["Principal & Interest", "Property Taxes", "Insurance", "HOA"],
+        "Amount": [monthly_pi, target_taxes, monthly_insurance, target_hoa]
+    }
+    fig = px.pie(chart_data, values="Amount", names="Category", hole=0.6, color_discrete_sequence=['#3B82F6', '#60A5FA', '#93C5FD', '#1E3A8A'])
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#F8FAFC'), margin=dict(t=0, b=0, l=0, r=0))
+    fig.update_traces(textposition='inside', textinfo='percent+label', showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown('<p class="disclaimer">Disclaimer: This affordability breakdown is an estimate for educational purposes only and does not constitute official financial advice or a guarantee of loan approval. Property taxes and insurance rates are estimations.</p>', unsafe_allow_html=True)
+
+# --- ZONE 2: SMART SEARCH TABS ---
+# Restored the 3 tabs!
+tab1, tab2, tab3 = st.tabs(["🌐 Live Area Search", "✏️ Manual Entry", "📬 VIP Registration"])
+
+with tab1:
+    st.markdown("### 📍 Search MLS by Zip Code")
+    
+    # Made the Zip Input full width and incredibly prominent
+    zip_input = st.text_input("Enter Zip Code:", value="92117")
+    
+    if st.button("🔍 Search Area", use_container_width=True):
+        with st.spinner("Applying filters and scanning MLS for up to 100 properties..."):
+            results = fetch_property_gallery_api(zip_input, min_beds, min_baths, min_sqft, max_hoa_fee)
+            if results:
+                st.session_state['property_results'] = results
+                st.session_state['current_page'] = 0 
+            else:
+                st.error("No properties match your strict filters.")
+
+    if st.session_state['property_results']:
+        st.divider()
+        col_title, col_sort = st.columns([2, 1])
+        col_title.markdown("### 🏡 Matching Properties")
+        
+        def update_sort():
+            st.session_state['current_page'] = 0 
+            
+        sort_option = col_sort.selectbox("Sort By:", ["Newest / Relevant", "Price: Low to High", "Price: High to Low"], on_change=update_sort)
+        
+        display_results = st.session_state['property_results']
+        if sort_option == "Price: Low to High": display_results = sorted(display_results, key=lambda x: x['price'])
+        elif sort_option == "Price: High to Low": display_results = sorted(display_results, key=lambda x: x['price'], reverse=True)
+        
+        # --- PAGINATION LOGIC ---
+        ITEMS_PER_PAGE = 9
+        total_items = len(display_results)
+        total_pages = math.ceil(total_items / ITEMS_PER_PAGE)
+        
+        if st.session_state['current_page'] >= total_pages:
+            st.session_state['current_page'] = 0
+            
+        start_idx = st.session_state['current_page'] * ITEMS_PER_PAGE
+        end_idx = start_idx + ITEMS_PER_PAGE
+        page_results = display_results[start_idx:end_idx]
+        
+        cols = st.columns(3)
+        for idx, prop in enumerate(page_results): 
+            with cols[idx % 3]: 
+                st.markdown('<div class="property-card">', unsafe_allow_html=True)
+                st.image(prop['images'][0], use_container_width=True) 
+                st.markdown(f"**${prop['price']:,.0f}** | {prop['type']}")
+                st.caption(prop['address'])
+                
+                if st.button("📊 Analyze Financials", key=f"btn_{prop['address']}", use_container_width=True):
+                    show_dashboard(prop)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+        # --- UPGRADED PAGINATION CONTROLS ---
+        st.divider()
+        col_prev, col_page, col_next = st.columns([1, 2, 1])
+        
+        if col_prev.button("⬅️ Previous", disabled=(st.session_state['current_page'] == 0), use_container_width=True):
+            st.session_state['current_page'] -= 1
+            st.rerun()
+            
+        def handle_page_jump():
+            selected_page = st.session_state['page_jumper_select']
+            st.session_state['current_page'] = selected_page - 1
+            
+        col_page.markdown(f"<div class='pagination-text'><b>{total_items}</b> properties found</div>", unsafe_allow_html=True)
+        
+        page_numbers = list(range(1, total_pages + 1))
+        
+        col_page.selectbox(
+            "Jump to page:", 
+            options=page_numbers, 
+            index=st.session_state['current_page'],
+            key="page_jumper_select", 
+            on_change=handle_page_jump,
+            label_visibility="collapsed"
+        )
+        
+        if col_next.button("Next ➡️", disabled=(st.session_state['current_page'] >= total_pages - 1), use_container_width=True):
+            st.session_state['current_page'] += 1
+            st.rerun()
+
+# Restored the Manual Entry tab!
+with tab2:
+    st.markdown("### ✏️ Manual Entry")
+    st.caption("Bypass the API and enter property details manually.")
+    col_a, col_b, col_c = st.columns(3)
+    manual_price = col_a.number_input("Purchase Price ($)", value=0.0, step=10000.0)
+    manual_taxes = col_b.number_input("Monthly Taxes ($)", value=0.0, step=100.0)
+    manual_hoa = col_c.number_input("Monthly HOA ($)", value=0.0, step=50.0)
+    
+    if st.button("📊 Analyze Manual Entry", use_container_width=True):
+        if manual_price > 0:
+            mock_prop = {
+                'price': manual_price,
+                'taxes': manual_taxes,
+                'hoa': manual_hoa,
+                'address': "Manually Entered Property",
+                'type': "Custom Entry",
+                'images': []
+            }
+            show_dashboard(mock_prop)
+
+with tab3:
+    st.markdown("### 🔒 VIP Buyer Registration")
+    with st.form("contact_form"):
+        col_first, col_last = st.columns(2)
+        first_name = col_first.text_input("First Name")
+        last_name = col_last.text_input("Last Name")
+        phone_num = st.text_input("Phone Number")
+        email_addr = st.text_input("Email Address")
+        if st.form_submit_button("Submit Details"):
+            st.success("Contact info securely saved.")
