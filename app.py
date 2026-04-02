@@ -139,4 +139,4 @@ with st.sidebar.expander("🏡 Property Filters", expanded=True):
     min_beds = st.number_input("Minimum Bedrooms", value=3, step=1, help="The minimum number of sleeping rooms you need.")
     min_baths = st.number_input("Minimum Bathrooms", value=2, step=1, help="Includes both full and half bathrooms.")
     min_sqft = st.number_input("Minimum SqFt", value=1200, step=100, help="Total livable interior space. For reference, a standard 2-car garage is about 400 SqFt.")
-    max_hoa_fee = st.number_input("Max Monthly HOA ($)", value=500, step=50, help="Homeowners Association fees. Condos and townhomes typically have higher HOAs to cover exterior maintenance, pools, and amenities
+    max_hoa_fee = st.number_input("Max Monthly HOA ($)", value=500, step=50, help="Homeowners Association fees. Condos and townhomes typically have higher HOAs to cover exterior maintenance, pools, and amenities.")
