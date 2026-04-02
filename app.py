@@ -181,7 +181,7 @@ def show_dashboard(prop):
     st.markdown('<p class="disclaimer">Disclaimer: This affordability breakdown is an estimate for educational purposes only and does not constitute official financial advice or a guarantee of loan approval. Property taxes and insurance rates are estimations.</p>', unsafe_allow_html=True)
 
 # --- ZONE 2: SMART SEARCH TABS ---
-tab1, tab2 = st.tabs(["🌐 Live Area Search", "📬 VIP Registration"])
+tab1, tab2 = st.tabs(["🌐 Live Area Search", "📬 Contact Info"])
 
 with tab1:
     col1, col2 = st.columns([3, 1])
@@ -253,7 +253,7 @@ with tab1:
             st.rerun()
 
 with tab2:
-    st.markdown("### 🔒 VIP Buyer Registration")
+    st.markdown("### 🔒 Contact Info")
     with st.form("contact_form"):
         col_first, col_last = st.columns(2)
         first_name = col_first.text_input("First Name")
