@@ -271,7 +271,7 @@ with tab1:
 
 with tab2:
     st.markdown("### ✏️ Manual Entry")
-    st.caption("Bypass the API and enter property details manually.")
+    st.caption("Enter property details manually.")
     col_a, col_b, col_c = st.columns(3)
     manual_price = col_a.number_input("Purchase Price ($)", value=0.0, step=10000.0)
     manual_taxes = col_b.number_input("Monthly Taxes ($)", value=0.0, step=100.0)
